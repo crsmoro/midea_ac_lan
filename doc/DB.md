@@ -134,21 +134,10 @@ consumption (liters) and energy consumption (kWh). They are not meter readings,
 cumulative totals, or suitable as `total_increasing` statistics. Only this exact
 model/subtype pair is enabled; do not impersonate it for other devices.
 
-These sensors require the companion protocol-library fork pinned in the manifest
-at commit `693e6c4d0f2ea7144267f6b2f8fa8dff1faec431`, which exports
-`last_cycle_water_consumption` and `last_cycle_energy_consumption`. Older
-libraries safely skip them. After the appliance reports a value, enable the
-additional sensors in **CONFIGURE**. Before a report or saved value, the reading
-is unknown, not zero.
-
-**Upgrade caveat:** Home Assistant 2024.4.1's requirement check considers any
-installed `midea-lan` version sufficient for a direct Git requirement, without
-checking its origin. An existing PyPI `2026.10.0` installation can therefore be
-mistaken for the required fork and the sensors will be skipped. The manifest
-alone does not guarantee replacement on such an installation. Verify that the
-fork commit is actually installed in Home Assistant's Python environment before
-expecting the new sensors; installation/restart procedures depend on the HA
-installation type.
+The integration includes a small model-specific adapter over the published
+`midea-lan==2026.10.0` library; no Git library dependency is required. Enable the
+additional sensors in **CONFIGURE** before starting a wash. Before a report or
+saved value, the reading is unknown, not zero, even while the device is offline.
 
 A last known value remains visible when the appliance disconnects. Home Assistant
 can restore the last saved native value after a restart; restoration depends on

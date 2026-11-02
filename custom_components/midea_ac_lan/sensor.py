@@ -267,8 +267,8 @@ class MideaCycleEstimateSensor(MideaSensor, RestoreSensor):
 
     @property
     def available(self) -> bool:
-        """A reported estimate is readable independently of the connection."""
-        return self.native_value is not None or self._device.available
+        """An estimate can be unknown independently of device connectivity."""
+        return True
 
     @property
     def extra_state_attributes(self) -> dict[str, str | bool]:

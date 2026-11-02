@@ -9,7 +9,7 @@ requires-python = ">=3.12,<3.15"
 license = { text = "MIT" }
 # Runtime dependency, mirrors custom_components/midea_ac_lan/manifest.json so that
 # `import midealan` works inside the dev virtualenv.
-dependencies = ["midea-lan @ git+https://github.com/crsmoro/midea-lan.git@693e6c4d0f2ea7144267f6b2f8fa8dff1faec431"]
+dependencies = ["midea-lan==2026.10.0"]
 
 # Development dependencies (PEP 735). Installed by default with `uv sync`.
 # Replaces the former requirements-dev.txt + requirements-dev-3.1X.txt files.

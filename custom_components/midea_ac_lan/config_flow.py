@@ -1036,14 +1036,15 @@ class MideaLanOptionsFlowHandler(OptionsFlow):
             required_attribute = attribute_config.get("required_attribute")
             if (
                 required_attribute is not None
-                and (
-                    device is None
-                    or required_attribute not in device.attributes
-                    or device.get_attribute(required_attribute) is None
-                )
                 and attribute_name not in selected_attributes
             ):
-                continue
+                if device is None or required_attribute not in device.attributes:
+                    continue
+                if (
+                    not attribute_config.get("cycle_estimate")
+                    and device.get_attribute(required_attribute) is None
+                ):
+                    continue
             if attribute_config.get("type") in EXTRA_SENSOR:
                 sensors[attribute_name] = attribute_config.get("name")
             elif attribute_config.get(

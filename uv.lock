@@ -2610,7 +2610,7 @@ run = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "midea-lan", git = "https://github.com/crsmoro/midea-lan.git?rev=693e6c4d0f2ea7144267f6b2f8fa8dff1faec431" }]
+requires-dist = [{ name = "midea-lan", specifier = "==2026.10.0" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2634,7 +2634,7 @@ run = [
 [[package]]
 name = "midea-lan"
 version = "2026.10.0"
-source = { git = "https://github.com/crsmoro/midea-lan.git?rev=693e6c4d0f2ea7144267f6b2f8fa8dff1faec431#693e6c4d0f2ea7144267f6b2f8fa8dff1faec431" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp", version = "3.9.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
@@ -2646,6 +2646,10 @@ dependencies = [
     { name = "platformdirs" },
     { name = "pycryptodome" },
     { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/e3/a071b824cf4c6acb0b98d07a9ffd1429b626efd45b73ba6cda9c963f5687/midea_lan-2026.10.0.tar.gz", hash = "sha256:94b66cf804015e814d3108f1a8a7e591ecdadc4f16ea13b840ea18914e44110e", size = 272482, upload-time = "2026-10-22T10:24:03.249Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/46/13b174be525c0c16893c22ac79eea45d7dc29cee6aced9bed0dcdd4f51c0/midea_lan-2026.10.0-py3-none-any.whl", hash = "sha256:1aef918671f0be1e9930ccdda3ed28ff7e8de1d5e08a26ba9650466b8667e56d", size = 331840, upload-time = "2026-10-22T10:24:01.812Z" },
 ]
 
 [[package]]

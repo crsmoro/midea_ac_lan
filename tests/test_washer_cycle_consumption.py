@@ -14,12 +14,11 @@ from homeassistant.components.sensor import (
     SensorExtraStoredData,
 )
 from homeassistant.const import CONF_DEVICE_ID, CONF_SENSORS, CONF_TYPE
+from midea_ac_lan import device_selector
 from midea_ac_lan.config_flow import MideaLanOptionsFlowHandler
 from midea_ac_lan.const import CONF_MODEL, CONF_SUBTYPE, DEVICES, DOMAIN
 from midea_ac_lan.sensor import MideaCycleEstimateSensor, MideaSensor, async_setup_entry
 from midealan.const import ProtocolVersion
-from midealan.devices.db import DeviceAttributes as DBAttributes
-from midealan.devices.db import MideaDBDevice
 
 
 def test_water_sensor_exposes_the_device_estimate() -> None:
@@ -147,6 +146,19 @@ def test_metadata_is_not_cumulative(key: str, device_class: SensorDeviceClass) -
     assert sensor._config["required_attribute"] == key
 
 
+@pytest.mark.parametrize("key", [WATER, ENERGY])
+def test_unknown_cycle_value_remains_available_offline(key: str) -> None:
+    """Before any report an offline device has an unknown, not unavailable state."""
+    sensor = setup_sensors("38132406", 19504, {key: None}, [key])[0]
+    cast("Mock", sensor._device).available = False
+    assert sensor.native_value is None
+    assert sensor.available is True
+    assert sensor.extra_state_attributes == {
+        "value_source": "unknown",
+        "device_connected": False,
+    }
+
+
 def test_last_cycle_value_remains_visible_offline() -> None:
     """A previously reported cycle is still visible when the device disconnects."""
     sensor = setup_sensors("38132406", 19504, {WATER: 45.8}, [WATER])[0]
@@ -194,6 +206,26 @@ def test_restore_sensor_native_data_round_trip() -> None:
         asyncio.run(restored.async_added_to_hass())
     assert restored.native_value == pytest.approx(0.01)
     assert restored.extra_state_attributes["value_source"] == "restored"
+
+
+def test_reenabled_sensor_restores_its_previous_value() -> None:
+    """An opted-out then re-enabled sensor recovers saved HA native data."""
+    original = setup_sensors("38132406", 19504, {WATER: 45.8}, [WATER])[0]
+    persisted = original.extra_restore_state_data.as_dict()
+    assert not setup_sensors("38132406", 19504, {WATER: None}, [])
+    sensor_again = setup_sensors("38132406", 19504, {WATER: None}, [WATER])[0]
+    with (
+        patch.object(MideaSensor, "async_added_to_hass", new_callable=AsyncMock),
+        patch.object(
+            sensor_again,
+            "async_get_last_extra_data",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(as_dict=lambda: persisted),
+        ),
+    ):
+        asyncio.run(sensor_again.async_added_to_hass())
+    assert sensor_again.native_value == pytest.approx(45.8)
+    assert sensor_again.extra_state_attributes["value_source"] == "restored"
 
 
 def test_restored_value_is_replaced_by_new_report() -> None:
@@ -256,8 +288,10 @@ def test_sensor_updates_follow_device_value() -> None:
 
 
 @pytest.mark.parametrize("value", [None, 0.0, 45.8])
-def test_options_show_only_known_values(value: float | None) -> None:
-    """The options flow exposes an unselected sensor once a value is known."""
+def test_options_show_supported_values_even_before_first_cycle(
+    value: float | None,
+) -> None:
+    """Allow supported sensors to be enabled before their first report."""
     device = Mock()
     device.attributes = {WATER: value}
     device.get_attribute.side_effect = device.attributes.get
@@ -278,16 +312,13 @@ def test_options_show_only_known_values(value: float | None) -> None:
         for field, validator in result["data_schema"].schema.items()
         if field.schema == CONF_SENSORS
     )
-    assert (WATER in sensor_field.options) == (value is not None)
+    assert WATER in sensor_field.options
 
 
-@pytest.mark.skipif(
-    not hasattr(DBAttributes, "last_cycle_water_consumption"),
-    reason="Pinned legacy library has no last-cycle decoder",
-)
 def test_real_library_decoder_feeds_integration_sensors() -> None:
     """Decode a synthetic minimal 0405 message through the actual SDK and entities."""
-    device = MideaDBDevice(
+    device = device_selector(
+        device_type=0xDB,
         customize="",
         name="Offline washer",
         device_id=1,
@@ -311,8 +342,9 @@ def test_real_library_decoder_feeds_integration_sensors() -> None:
     assert sensors[ENERGY].native_value is None
     # Minimal synthetic frame, not a representation of the real full capture.
     header = bytearray(10)
-    header[0], header[2], header[9] = 0xAA, 0xDB, 0x04
-    message = bytes(header + bytearray([0x05, 0xCA, 0x01, 0x0A, 0x00, 0x00]))
+    header[0], header[1], header[2], header[9] = 0xAA, 15, 0xDB, 0x04
+    data = bytes(header) + bytes.fromhex("05 ca 01 0a 00")
+    message = data + bytes([-sum(data[1:]) & 0xFF])
     device.process_message(message)
     assert sensors[WATER].native_value == pytest.approx(45.8)
     assert sensors[ENERGY].native_value == pytest.approx(0.01)
