@@ -14,7 +14,7 @@
     "midealan"
   ],
   "requirements": [
-    "midea-lan==2026.10.0"
+    "midea-lan @ git+https://github.com/crsmoro/midea-lan.git@693e6c4d0f2ea7144267f6b2f8fa8dff1faec431"
   ],
   "version": "2026.10.0"
 }

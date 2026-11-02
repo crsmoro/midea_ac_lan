@@ -1534,6 +1534,12 @@
       }
     },
     "sensor": {
+      "last_cycle_water_consumption": {
+        "name": "Last wash water consumption (estimated)"
+      },
+      "last_cycle_energy_consumption": {
+        "name": "Last wash energy consumption (estimated)"
+      },
       "db_running_status": {
         "name": "Washer status"
       },

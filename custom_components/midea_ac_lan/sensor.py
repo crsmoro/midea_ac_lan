@@ -7,6 +7,7 @@ from datetime import timedelta
 from typing import Any, cast
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
@@ -83,6 +84,8 @@ async def async_setup_entry(
             sensors.append(
                 MideaCloudUsageSensor(device, entity_key, cloud_coordinator),
             )
+        elif config.get("cycle_estimate"):
+            sensors.append(MideaCycleEstimateSensor(device, entity_key))
         elif config.get("estimate"):
             sensor = MideaEstimatedUsageSensor(device, entity_key)
             sensors.append(sensor)
@@ -219,6 +222,68 @@ class MideaSensor(MideaEntity, SensorEntity):
     def _async_timer_update(self, _now: Any) -> None:  # ruff:ignore[any-type]
         """Update timer state every second."""
         self.schedule_update_ha_state()
+
+
+class MideaCycleEstimateSensor(MideaSensor, RestoreSensor):
+    """Keep a last-cycle estimate across disconnects and HA restarts."""
+
+    def __init__(self, device: MideaDevice, entity_key: str) -> None:
+        """Initialize with no value until a report or saved state is available."""
+        super().__init__(device, entity_key)
+        self._last_value: float | None = None
+        self._restored = False
+
+    async def async_added_to_hass(self) -> None:
+        """Restore a compatible stored native value, if any."""
+        await super().async_added_to_hass()
+        stored = await self.async_get_last_sensor_data()
+        if (
+            stored is not None
+            and stored.native_unit_of_measurement == self.native_unit_of_measurement
+        ):
+            value = stored.native_value
+            if (
+                isinstance(value, int | float)
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                and value >= 0
+            ):
+                self._last_value = float(value)
+                self._restored = True
+
+    @property
+    def native_value(self) -> StateType:
+        """Prefer the device's report, otherwise retain the last known value."""
+        value = self._device.get_attribute(self._entity_key)
+        if (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and value >= 0
+        ):
+            self._last_value = float(value)
+            self._restored = False
+        return self._last_value
+
+    @property
+    def available(self) -> bool:
+        """A reported estimate is readable independently of the connection."""
+        return self.native_value is not None or self._device.available
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str | bool]:
+        """Identify the origin and the appliance's current connectivity."""
+        value = self.native_value
+        return {
+            "value_source": (
+                "unknown"
+                if value is None
+                else "restored"
+                if self._restored
+                else "current_session"
+            ),
+            "device_connected": self._device.available,
+        }
 
 
 class MideaCloudUsageSensor(MideaSensor):

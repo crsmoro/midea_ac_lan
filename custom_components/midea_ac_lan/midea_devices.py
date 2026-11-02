@@ -7292,6 +7292,30 @@ MIDEA_DEVICES: dict[int, dict[str, dict[str, Any] | str]] = {
                 "icon": "mdi:air-filter",
                 "available_value_attribute": "forget_free",
             },
+            # Per-cycle estimates are not cumulative; HA's water/energy device
+            # classes do not accept a measurement state class on older HA releases.
+            "last_cycle_water_consumption": {
+                "type": Platform.SENSOR,
+                "required_attribute": "last_cycle_water_consumption",
+                "cycle_estimate": True,
+                "models": ["38132406"],
+                "subtypes": [19504],
+                "translation_key": "last_cycle_water_consumption",
+                "name": "Last wash water consumption (estimated)",
+                "device_class": SensorDeviceClass.WATER,
+                "unit": UnitOfVolume.LITERS,
+            },
+            "last_cycle_energy_consumption": {
+                "type": Platform.SENSOR,
+                "required_attribute": "last_cycle_energy_consumption",
+                "cycle_estimate": True,
+                "models": ["38132406"],
+                "subtypes": [19504],
+                "translation_key": "last_cycle_energy_consumption",
+                "name": "Last wash energy consumption (estimated)",
+                "device_class": SensorDeviceClass.ENERGY,
+                "unit": UnitOfEnergy.KILO_WATT_HOUR,
+            },
             DBAttributes.time_remaining: {
                 "type": Platform.SENSOR,
                 "translation_key": "time_remaining",
