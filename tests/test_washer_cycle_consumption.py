@@ -4,7 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -12,12 +12,14 @@ from homeassistant.components.sensor import (
     RestoreSensor,
     SensorDeviceClass,
     SensorExtraStoredData,
+    SensorStateClass,
 )
 from homeassistant.const import CONF_DEVICE_ID, CONF_SENSORS, CONF_TYPE
 from midea_ac_lan import device_selector
 from midea_ac_lan.config_flow import MideaLanOptionsFlowHandler
 from midea_ac_lan.const import CONF_MODEL, CONF_SUBTYPE, DEVICES, DOMAIN
-from midea_ac_lan.sensor import MideaCycleEstimateSensor, MideaSensor, async_setup_entry
+from midea_ac_lan.midea_devices import MIDEA_DEVICES
+from midea_ac_lan.sensor import MideaSensor, async_setup_entry
 from midealan.const import ProtocolVersion
 
 
@@ -40,10 +42,10 @@ def test_water_sensor_exposes_the_device_estimate() -> None:
 
     asyncio.run(async_setup_entry(hass, entry, add_entities))
 
-    sensors = add_entities.call_args.args[0]
-    assert len(sensors) == 1
-    assert sensors[0].native_value == pytest.approx(45.8)
-    assert sensors[0].native_unit_of_measurement == "L"
+    sensors = {sensor._entity_key: sensor for sensor in add_entities.call_args.args[0]}
+    assert sensors[WATER].native_value == pytest.approx(45.8)
+    assert sensors[WATER].native_unit_of_measurement == "L"
+    assert sensors[WATER_TOTAL].native_value == 0
 
 
 def test_energy_sensor_exposes_the_device_estimate() -> None:
@@ -65,14 +67,17 @@ def test_energy_sensor_exposes_the_device_estimate() -> None:
 
     asyncio.run(async_setup_entry(hass, entry, add_entities))
 
-    sensors = add_entities.call_args.args[0]
-    assert len(sensors) == 1
-    assert sensors[0].native_value == pytest.approx(0.01)
-    assert sensors[0].native_unit_of_measurement == "kWh"
+    sensors = {sensor._entity_key: sensor for sensor in add_entities.call_args.args[0]}
+    assert sensors[ENERGY].native_value == pytest.approx(0.01)
+    assert sensors[ENERGY].native_unit_of_measurement == "kWh"
+    assert sensors[ENERGY_TOTAL].native_value == 0
 
 
 WATER = "last_cycle_water_consumption"
 ENERGY = "last_cycle_energy_consumption"
+WATER_TOTAL = "db_total_water_consumption"
+ENERGY_TOTAL = "db_total_energy_consumption"
+REPORT_SEQUENCE = "cycle_report_sequence"
 
 
 def setup_sensors(
@@ -81,7 +86,7 @@ def setup_sensors(
     attributes: dict,
     selected: list[str],
     device_type: int = 0xDB,
-) -> list[MideaCycleEstimateSensor]:
+) -> list[MideaSensor]:
     """Run the real platform setup using a small synthetic device."""
     device = Mock(device_type=device_type, device_id=1, name="Offline washer")
     device.model = model
@@ -92,7 +97,110 @@ def setup_sensors(
     entry = SimpleNamespace(data={CONF_DEVICE_ID: 1}, options={CONF_SENSORS: selected})
     add_entities = Mock()
     asyncio.run(async_setup_entry(hass, entry, add_entities))
-    return cast("list[MideaCycleEstimateSensor]", add_entities.call_args.args[0])
+    return cast("list[MideaSensor]", add_entities.call_args.args[0])
+
+
+def test_cumulative_cycle_sensors_are_energy_dashboard_compatible() -> None:
+    """Supported cumulative usage entities are created and use increasing totals."""
+    sensors = setup_sensors(
+        "38132406",
+        19504,
+        {WATER: None, ENERGY: None, REPORT_SEQUENCE: 0},
+        [],
+    )
+    by_key = {sensor._entity_key: sensor for sensor in sensors}
+
+    assert set(by_key) == {WATER_TOTAL, ENERGY_TOTAL}
+    assert by_key[WATER_TOTAL].native_value == 0
+    assert by_key[WATER_TOTAL].device_class == SensorDeviceClass.WATER
+    assert by_key[WATER_TOTAL].native_unit_of_measurement == "L"
+    assert by_key[WATER_TOTAL].state_class == SensorStateClass.TOTAL_INCREASING
+    assert by_key[ENERGY_TOTAL].native_value == 0
+    assert by_key[ENERGY_TOTAL].device_class == SensorDeviceClass.ENERGY
+    assert by_key[ENERGY_TOTAL].native_unit_of_measurement == "kWh"
+    assert by_key[ENERGY_TOTAL].state_class == SensorStateClass.TOTAL_INCREASING
+
+
+def test_cycle_totals_count_each_new_report_once() -> None:
+    """Totals add every report event, even when the next estimate is unchanged."""
+    attributes = {WATER: 45.8, ENERGY: 0.01, REPORT_SEQUENCE: 0}
+    sensors = setup_sensors("38132406", 19504, attributes, [])
+    by_key = {sensor._entity_key: sensor for sensor in sensors}
+    water_total = by_key[WATER_TOTAL]
+    energy_total = by_key[ENERGY_TOTAL]
+    for sensor in by_key.values():
+        sensor.hass = SimpleNamespace()
+        sensor.schedule_update_if_running = Mock()
+
+    water_total.update_state({REPORT_SEQUENCE: 1})
+    energy_total.update_state({REPORT_SEQUENCE: 1})
+    assert water_total.native_value == pytest.approx(45.8)
+    assert energy_total.native_value == pytest.approx(0.01)
+
+    water_total.update_state({REPORT_SEQUENCE: 1})
+    energy_total.update_state({REPORT_SEQUENCE: 1})
+    assert water_total.native_value == pytest.approx(45.8)
+    assert energy_total.native_value == pytest.approx(0.01)
+
+    attributes[REPORT_SEQUENCE] = 2
+    water_total.update_state({REPORT_SEQUENCE: 2})
+    energy_total.update_state({REPORT_SEQUENCE: 2})
+    assert water_total.native_value == pytest.approx(91.6)
+    assert energy_total.native_value == pytest.approx(0.02)
+
+
+def test_cycle_total_restores_its_value_after_restart() -> None:
+    """The cumulative sensor restores a valid saved native total."""
+    sensors = setup_sensors(
+        "38132406",
+        19504,
+        {ENERGY: None, REPORT_SEQUENCE: 0},
+        [],
+    )
+    energy_total = next(
+        sensor for sensor in sensors if sensor._entity_key == ENERGY_TOTAL
+    )
+    assert isinstance(energy_total, RestoreSensor)
+    with (
+        patch.object(MideaSensor, "async_added_to_hass", new_callable=AsyncMock),
+        patch.object(
+            energy_total,
+            "async_get_last_sensor_data",
+            new_callable=AsyncMock,
+            return_value=SensorExtraStoredData(1.23, "kWh"),
+        ),
+    ):
+        asyncio.run(energy_total.async_added_to_hass())
+
+    assert energy_total.native_value == pytest.approx(1.23)
+
+
+def test_report_during_state_restore_keeps_restored_total() -> None:
+    """A new cycle arriving while HA restores state is not overwritten."""
+    attributes = {WATER: 45.8, ENERGY: None, REPORT_SEQUENCE: 1}
+    sensors = setup_sensors("38132406", 19504, attributes, [])
+    water_total = next(
+        sensor for sensor in sensors if sensor._entity_key == WATER_TOTAL
+    )
+    water_total.hass = SimpleNamespace()
+    water_total.schedule_update_if_running = Mock()
+
+    async def load_state_with_report() -> SensorExtraStoredData:
+        water_total.update_state({REPORT_SEQUENCE: 1})
+        return SensorExtraStoredData(10.0, "L")
+
+    with (
+        patch.object(MideaSensor, "async_added_to_hass", new_callable=AsyncMock),
+        patch.object(
+            water_total,
+            "async_get_last_sensor_data",
+            new_callable=AsyncMock,
+            side_effect=load_state_with_report,
+        ),
+    ):
+        asyncio.run(water_total.async_added_to_hass())
+
+    assert water_total.native_value == pytest.approx(55.8)
 
 
 @pytest.mark.parametrize(
@@ -124,13 +232,19 @@ def test_other_device_type_does_not_get_washer_sensors() -> None:
 def test_missing_attributes_are_skipped_independently(attributes: dict) -> None:
     """An older or partially supported library creates no invalid entities."""
     sensors = setup_sensors("38132406", 19504, attributes, [WATER, ENERGY])
-    assert {sensor._entity_key for sensor in sensors} == set(attributes)
+    expected = set(attributes)
+    if WATER in attributes:
+        expected.add(WATER_TOTAL)
+    if ENERGY in attributes:
+        expected.add(ENERGY_TOTAL)
+    assert {sensor._entity_key for sensor in sensors} == expected
     assert all(sensor.native_value == pytest.approx(0.0) for sensor in sensors)
 
 
-def test_unselected_sensors_are_not_created() -> None:
-    """Both estimates require explicit opt-in."""
-    assert not setup_sensors("38132406", 19504, {WATER: 45.8, ENERGY: 0.01}, [])
+def test_cumulative_totals_do_not_require_opt_in() -> None:
+    """Default cumulative sensors exist even when last-cycle details are unselected."""
+    sensors = setup_sensors("38132406", 19504, {WATER: 45.8, ENERGY: 0.01}, [])
+    assert {sensor._entity_key for sensor in sensors} == {WATER_TOTAL, ENERGY_TOTAL}
 
 
 @pytest.mark.parametrize(
@@ -212,8 +326,15 @@ def test_reenabled_sensor_restores_its_previous_value() -> None:
     """An opted-out then re-enabled sensor recovers saved HA native data."""
     original = setup_sensors("38132406", 19504, {WATER: 45.8}, [WATER])[0]
     persisted = original.extra_restore_state_data.as_dict()
-    assert not setup_sensors("38132406", 19504, {WATER: None}, [])
-    sensor_again = setup_sensors("38132406", 19504, {WATER: None}, [WATER])[0]
+    assert not any(
+        sensor._entity_key == WATER
+        for sensor in setup_sensors("38132406", 19504, {WATER: None}, [])
+    )
+    sensor_again = next(
+        sensor
+        for sensor in setup_sensors("38132406", 19504, {WATER: None}, [WATER])
+        if sensor._entity_key == WATER
+    )
     with (
         patch.object(MideaSensor, "async_added_to_hass", new_callable=AsyncMock),
         patch.object(
@@ -315,6 +436,32 @@ def test_options_show_supported_values_even_before_first_cycle(
     assert WATER in sensor_field.options
 
 
+def test_options_show_cycle_totals_before_first_report() -> None:
+    """Cumulative sensors remain selectable before the first cycle report."""
+    device = Mock()
+    device.attributes = {WATER: None, ENERGY: None, REPORT_SEQUENCE: 0}
+    device.get_attribute.side_effect = device.attributes.get
+    entry = SimpleNamespace(
+        data={
+            CONF_DEVICE_ID: 1,
+            CONF_TYPE: 0xDB,
+            CONF_MODEL: "38132406",
+            CONF_SUBTYPE: 19504,
+        },
+        options={},
+    )
+    handler = MideaLanOptionsFlowHandler(entry)
+    handler.hass = SimpleNamespace(data={DOMAIN: {DEVICES: {1: device}}})
+    result = asyncio.run(handler.async_step_init())
+    sensor_field = next(
+        validator
+        for field, validator in result["data_schema"].schema.items()
+        if field.schema == CONF_SENSORS
+    )
+
+    assert {WATER_TOTAL, ENERGY_TOTAL} <= set(sensor_field.options)
+
+
 def test_real_library_decoder_feeds_integration_sensors() -> None:
     """Decode a synthetic minimal 0405 message through the actual SDK and entities."""
     device = device_selector(
@@ -351,13 +498,20 @@ def test_real_library_decoder_feeds_integration_sensors() -> None:
 
 
 @pytest.mark.parametrize("locale", ["en", "pt-BR"])
-def test_estimates_have_localized_names(locale: str) -> None:
-    """Both entities have localized names that explicitly say estimated."""
+def test_cycle_sensors_have_concise_english_names(locale: str) -> None:
+    """Last-cycle labels are concise and all new cycle totals are named."""
     root = Path(__file__).resolve().parents[1]
     path = (
         root / "custom_components" / "midea_ac_lan" / "translations" / f"{locale}.json"
     )
     translations = json.loads(path.read_text(encoding="utf-8"))["entity"]["sensor"]
-    marker = "estimated" if locale == "en" else "estimado"
-    for key in (WATER, ENERGY):
-        assert marker in translations[key]["name"].lower()
+    assert translations[WATER]["name"] == "Water used in last cycle"
+    assert translations[ENERGY]["name"] == "Energy used in last cycle"
+    assert translations[WATER_TOTAL]["name"] == "Total water used"
+    assert translations[ENERGY_TOTAL]["name"] == "Total energy used"
+    entity_configs = cast(
+        "dict[str, dict[str, Any]]",
+        MIDEA_DEVICES[0xDB]["entities"],
+    )
+    assert entity_configs[WATER]["name"] == "Water used in last cycle"
+    assert entity_configs[ENERGY]["name"] == "Energy used in last cycle"

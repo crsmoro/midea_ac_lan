@@ -2,10 +2,16 @@
   "entity": {
     "sensor": {
       "last_cycle_water_consumption": {
-        "name": "Consumo de água da última lavagem (estimado)"
+        "name": "Water used in last cycle"
       },
       "last_cycle_energy_consumption": {
-        "name": "Consumo de energia da última lavagem (estimado)"
+        "name": "Energy used in last cycle"
+      },
+      "db_total_water_consumption": {
+        "name": "Total water used"
+      },
+      "db_total_energy_consumption": {
+        "name": "Total energy used"
       }
     }
   }

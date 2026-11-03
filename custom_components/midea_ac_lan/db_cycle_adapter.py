@@ -15,6 +15,7 @@ from midealan.message import MessageResponse, MessageType
 
 WATER = "last_cycle_water_consumption"
 ENERGY = "last_cycle_energy_consumption"
+CYCLE_REPORT_SEQUENCE = "cycle_report_sequence"
 MODEL = "38132406"
 SUBTYPE = 19504
 FRAME_START = 0xAA
@@ -28,7 +29,9 @@ class CycleEstimateDBDevice(MideaDBDevice):
     def __init__(self, **kwargs: Any) -> None:  # ruff: ignore[any-type]
         """Initialize the SDK device and unknown last-cycle estimates."""
         super().__init__(**kwargs)
-        self._attributes.update({WATER: None, ENERGY: None})
+        self._attributes.update(
+            {WATER: None, ENERGY: None, CYCLE_REPORT_SEQUENCE: 0},
+        )
 
     def process_message(self, msg: bytes) -> dict[str, Any]:
         """Extend SDK processing for complete 0405 notification bodies.
@@ -62,7 +65,9 @@ class CycleEstimateDBDevice(MideaDBDevice):
                     / 1000,
                 }
                 self._attributes.update(values)
+                self._attributes[CYCLE_REPORT_SEQUENCE] += 1
                 status.update(values)
+                status[CYCLE_REPORT_SEQUENCE] = self._attributes[CYCLE_REPORT_SEQUENCE]
             return status
         return super().process_message(msg)
 

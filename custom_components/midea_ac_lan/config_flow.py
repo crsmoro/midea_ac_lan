@@ -1042,6 +1042,7 @@ class MideaLanOptionsFlowHandler(OptionsFlow):
                     continue
                 if (
                     not attribute_config.get("cycle_estimate")
+                    and not attribute_config.get("cycle_total")
                     and device.get_attribute(required_attribute) is None
                 ):
                     continue

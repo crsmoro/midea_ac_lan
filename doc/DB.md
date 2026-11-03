@@ -4,44 +4,46 @@
 
 ### Default entity
 
-No default entity
+No default control entity; cumulative water and energy sensors are enabled by default for the verified profile.
 
 ### Extra entities
 
-| EntityID                                         | Class         | Description                       |
-| ------------------------------------------------ | ------------- | --------------------------------- |
-| sensor.{DEVICEID}\_status                        | sensor        | Status                            |
-| sensor.{DEVICEID}\_mode                          | sensor        | Mode                              |
-| sensor.{DEVICEID}\_progress                      | sensor        | Progress                          |
-| sensor.{DEVICEID}\_program                       | sensor        | Program                           |
-| sensor.{DEVICEID}\_water_level                   | sensor        | Water Level                       |
-| sensor.{DEVICEID}\_temperature                   | sensor        | Temperature                       |
-| sensor.{DEVICEID}\_dehydration_speed             | sensor        | Dehydration Speed                 |
-| sensor.{DEVICEID}\_dehydration_time              | sensor        | dehydration Time Level            |
-| sensor.{DEVICEID}\_dehydration_time_value        | sensor        | Dehydration Time Value            |
-| sensor.{DEVICEID}\_wash_time                     | sensor        | Wash Time Level                   |
-| sensor.{DEVICEID}\_wash_time_value               | sensor        | Wash Time Value                   |
-| sensor.{DEVICEID}\_time_remaining                | sensor        | Time Remaining                    |
-| sensor.{DEVICEID}\_detergent                     | sensor        | Detergent                         |
-| sensor.{DEVICEID}\_softener                      | sensor        | Softener                          |
-| sensor.{DEVICEID}\_stains                        | sensor        | Stains                            |
-| sensor.{DEVICEID}\_dirty_degree                  | sensor        | Dirty Degree                      |
-| sensor.{DEVICEID}\_last_cycle_water_consumption  | sensor        | Last wash water (estimated, L)    |
-| sensor.{DEVICEID}\_last_cycle_energy_consumption | sensor        | Last wash energy (estimated, kWh) |
-| switch.{DEVICEID}\_power                         | switch        | Power                             |
-| switch.{DEVICEID}\_start                         | switch        | Start                             |
-| select.{DEVICEID}\_program_control               | select        | Washer program                    |
-| select.{DEVICEID}\_temperature_control           | select        | Water temperature                 |
-| select.{DEVICEID}\_spin_speed_control            | select        | Spin speed                        |
-| select.{DEVICEID}\_rinse_count                   | select        | Rinse count                       |
-| select.{DEVICEID}\_water_level_control           | select        | Water level                       |
-| select.{DEVICEID}\_detergent_control             | select        | Detergent dosing                  |
-| select.{DEVICEID}\_wash_time_control             | select        | Wash time (min)                   |
-| select.{DEVICEID}\_spin_time_control             | select        | Spin time (min)                   |
-| switch.{DEVICEID}\_forget_free                   | switch        | Forget-free care                  |
-| time.{DEVICEID}\_appointment_finish              | time          | Finish time (sets reservation)    |
-| button.{DEVICEID}\_cancel_appointment            | button        | Cancel reservation                |
-| binary_sensor.{DEVICEID}\_appointment            | binary_sensor | Reservation                       |
+| EntityID                                         | Class         | Description                     |
+| ------------------------------------------------ | ------------- | ------------------------------- |
+| sensor.{DEVICEID}\_status                        | sensor        | Status                          |
+| sensor.{DEVICEID}\_mode                          | sensor        | Mode                            |
+| sensor.{DEVICEID}\_progress                      | sensor        | Progress                        |
+| sensor.{DEVICEID}\_program                       | sensor        | Program                         |
+| sensor.{DEVICEID}\_water_level                   | sensor        | Water Level                     |
+| sensor.{DEVICEID}\_temperature                   | sensor        | Temperature                     |
+| sensor.{DEVICEID}\_dehydration_speed             | sensor        | Dehydration Speed               |
+| sensor.{DEVICEID}\_dehydration_time              | sensor        | dehydration Time Level          |
+| sensor.{DEVICEID}\_dehydration_time_value        | sensor        | Dehydration Time Value          |
+| sensor.{DEVICEID}\_wash_time                     | sensor        | Wash Time Level                 |
+| sensor.{DEVICEID}\_wash_time_value               | sensor        | Wash Time Value                 |
+| sensor.{DEVICEID}\_time_remaining                | sensor        | Time Remaining                  |
+| sensor.{DEVICEID}\_detergent                     | sensor        | Detergent                       |
+| sensor.{DEVICEID}\_softener                      | sensor        | Softener                        |
+| sensor.{DEVICEID}\_stains                        | sensor        | Stains                          |
+| sensor.{DEVICEID}\_dirty_degree                  | sensor        | Dirty Degree                    |
+| sensor.{DEVICEID}\_last_cycle_water_consumption  | sensor        | Water used in last cycle (L)    |
+| sensor.{DEVICEID}\_last_cycle_energy_consumption | sensor        | Energy used in last cycle (kWh) |
+| sensor.{DEVICEID}\_db_total_water_consumption    | sensor        | Total water used (L)            |
+| sensor.{DEVICEID}\_db_total_energy_consumption   | sensor        | Total energy used (kWh)         |
+| switch.{DEVICEID}\_power                         | switch        | Power                           |
+| switch.{DEVICEID}\_start                         | switch        | Start                           |
+| select.{DEVICEID}\_program_control               | select        | Washer program                  |
+| select.{DEVICEID}\_temperature_control           | select        | Water temperature               |
+| select.{DEVICEID}\_spin_speed_control            | select        | Spin speed                      |
+| select.{DEVICEID}\_rinse_count                   | select        | Rinse count                     |
+| select.{DEVICEID}\_water_level_control           | select        | Water level                     |
+| select.{DEVICEID}\_detergent_control             | select        | Detergent dosing                |
+| select.{DEVICEID}\_wash_time_control             | select        | Wash time (min)                 |
+| select.{DEVICEID}\_spin_time_control             | select        | Spin time (min)                 |
+| switch.{DEVICEID}\_forget_free                   | switch        | Forget-free care                |
+| time.{DEVICEID}\_appointment_finish              | time          | Finish time (sets reservation)  |
+| button.{DEVICEID}\_cancel_appointment            | button        | Cancel reservation              |
+| binary_sensor.{DEVICEID}\_appointment            | binary_sensor | Reservation                     |
 
 Parameter entities require the verified model/subtype and a supporting SDK.
 Availability also depends on the current program and appliance state; see the
@@ -129,10 +131,11 @@ When daylight saving time ends, repeated local times select the earliest valid f
 
 ## Last-wash estimates: 38132406 / subtype 19504
 
-Two optional sensors report the appliance's **estimated** last-cycle water
-consumption (liters) and energy consumption (kWh). They are not meter readings,
-cumulative totals, or suitable as `total_increasing` statistics. Only this exact
-model/subtype pair is enabled; do not impersonate it for other devices.
+Two optional sensors report the appliance's estimated last-cycle water
+consumption (liters) and energy consumption (kWh). Their English labels are
+**Water used in last cycle** and **Energy used in last cycle**. They are not
+meter readings or cumulative totals. Only this exact model/subtype pair is
+enabled; do not impersonate it for other devices.
 
 The integration includes a small model-specific adapter over the published
 `midea-lan==2026.10.0` library; no Git library dependency is required. Enable the
@@ -147,6 +150,16 @@ attribute `value_source` is `restored`, `current_session` or `unknown`, and
 reading is historical, not proof of a newly completed wash; no cycle timestamp is
 provided. A new device report replaces the saved value. Restoration was tested
 with simulated HA stored data, not a real HA restart or physical power-off.
+
+The two cumulative sensors (`db_total_water_consumption` and
+`db_total_energy_consumption`) are created by default for this same profile.
+They start at zero and sum each valid 0405 consumption notification received
+after the entities are loaded; they use `state_class: total_increasing` and retain
+their totals across Home Assistant restarts. The energy total uses kWh and is
+suitable as an energy-dashboard source. The water total uses liters. Previous
+cycles cannot be backfilled because the appliance reports only the latest cycle.
+The protocol provides no cycle identifier, so each valid notification is treated
+as a separate report; a duplicated notification could be counted twice.
 
 One observed end-of-cycle report corresponded to 45.800 L and 0.0100 kWh in the
 app, which labels them estimates; this single observation does not establish

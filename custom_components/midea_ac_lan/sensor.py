@@ -27,6 +27,7 @@ from .cloud import (
     create_cloud_coordinator,
 )
 from .const import DEVICES, DOMAIN, supports_device
+from .db_cycle_adapter import CYCLE_REPORT_SEQUENCE
 from .midea_devices import MIDEA_DEVICES
 from .midea_entity import MideaEntity
 
@@ -84,6 +85,8 @@ async def async_setup_entry(
             sensors.append(
                 MideaCloudUsageSensor(device, entity_key, cloud_coordinator),
             )
+        elif config.get("cycle_total"):
+            sensors.append(MideaCumulativeCycleSensor(device, entity_key))
         elif config.get("cycle_estimate"):
             sensors.append(MideaCycleEstimateSensor(device, entity_key))
         elif config.get("estimate"):
@@ -284,6 +287,84 @@ class MideaCycleEstimateSensor(MideaSensor, RestoreSensor):
             ),
             "device_connected": self._device.available,
         }
+
+
+class MideaCumulativeCycleSensor(MideaSensor, RestoreSensor):
+    """Accumulate per-cycle reports into a persistent total-increasing sensor."""
+
+    _REPORT_SEQUENCE = CYCLE_REPORT_SEQUENCE
+
+    def __init__(self, device: MideaDevice, entity_key: str) -> None:
+        """Initialize the cumulative total and event cursor."""
+        super().__init__(device, entity_key)
+        self._total = 0.0
+        self._last_report_sequence = 0
+        self._source_attribute = cast("str", self._config["source_attribute"])
+        self._restoring = False
+        self._pending_report_values: list[float] = []
+
+    async def async_added_to_hass(self) -> None:
+        """Restore state and preserve reports arriving during async setup."""
+        self._restoring = True
+        await super().async_added_to_hass()
+        stored = await self.async_get_last_sensor_data()
+        if (
+            stored is not None
+            and stored.native_unit_of_measurement == self.native_unit_of_measurement
+        ):
+            value = stored.native_value
+            if (
+                isinstance(value, int | float)
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                and value >= 0
+            ):
+                self._total = float(value)
+        pending = self._pending_report_values
+        self._pending_report_values = []
+        self._total += sum(pending)
+        self._restoring = False
+        sequence = self._device.get_attribute(CYCLE_REPORT_SEQUENCE)
+        if isinstance(sequence, int) and not isinstance(sequence, bool):
+            self._last_report_sequence = max(self._last_report_sequence, sequence)
+        if pending and self.hass:
+            self.schedule_update_if_running()
+
+    @property
+    def native_value(self) -> StateType:
+        """Cumulative consumption reported by the appliance."""
+        return round(self._total, 3)
+
+    @property
+    def available(self) -> bool:
+        """The persisted total remains useful while the appliance is offline."""
+        return True
+
+    @callback
+    def update_state(self, status: Any) -> None:  # ruff:ignore[any-type]
+        """Add one new valid cycle report, ignoring repeated sequence callbacks."""
+        sequence = status.get(self._REPORT_SEQUENCE)
+        if (
+            isinstance(sequence, int)
+            and not isinstance(sequence, bool)
+            and sequence > self._last_report_sequence
+        ):
+            value = self._device.get_attribute(self._source_attribute)
+            if (
+                isinstance(value, int | float)
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                and value >= 0
+            ):
+                amount = float(value)
+                if self._restoring:
+                    self._pending_report_values.append(amount)
+                else:
+                    self._total += amount
+            self._last_report_sequence = sequence
+            if self.hass and not self._restoring:
+                self.schedule_update_if_running()
+        super().update_state(status)
 
 
 class MideaCloudUsageSensor(MideaSensor):

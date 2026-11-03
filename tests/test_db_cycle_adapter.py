@@ -27,6 +27,8 @@ from midealan.devices import device_selector as sdk_device_selector
 from midealan.devices.db import MideaDBDevice
 from midealan.message import MessageQuestCustom, MessageResponse, MessageType
 
+TWO_REPORTS = 2
+
 
 def args(
     device_type: int = 0xDB,
@@ -88,6 +90,23 @@ def test_rejects_report_with_invalid_checksum() -> None:
     assert device.attributes == before
 
 
+def test_cycle_report_sequence_increments_only_for_valid_reports() -> None:
+    """Each valid 0405 report gets a distinct event cursor, even with equal values."""
+    device = device_selector(**args())
+    report = frame(bytes.fromhex("05 ca 01 0a 00"))
+
+    first = device.process_message(report)
+    second = device.process_message(report)
+    assert first["cycle_report_sequence"] == 1
+    assert second["cycle_report_sequence"] == TWO_REPORTS
+    assert device.attributes["cycle_report_sequence"] == TWO_REPORTS
+
+    malformed = bytearray(report)
+    malformed[-1] ^= 1
+    assert device.process_message(bytes(malformed)) == {}
+    assert device.attributes["cycle_report_sequence"] == TWO_REPORTS
+
+
 def test_synthetic_frame_matches_sdk_serializer() -> None:
     """The fixture follows the SDK's actual length and checksum convention."""
     body = bytes.fromhex("05 ca 01 0a 00")
@@ -142,6 +161,7 @@ def test_extended_frame_checksum_covers_the_entire_declared_body() -> None:
     assert device.process_message(message) == {
         WATER: 45.8,
         ENERGY: 0.01,
+        "cycle_report_sequence": 1,
     }
     before = device.attributes.copy()
     corrupted = bytearray(message)
@@ -284,23 +304,38 @@ def test_sdk_update_callbacks_receive_decoded_values() -> None:
     device.register_update(callback)
     status = device.process_message(frame(bytes.fromhex("05 ca 01 0a 00")))
     device.update_all(status)
-    callback.assert_called_once_with({WATER: 45.8, ENERGY: 0.01})
+    callback.assert_called_once_with(
+        {
+            WATER: 45.8,
+            ENERGY: 0.01,
+            "cycle_report_sequence": 1,
+        },
+    )
 
 
 def test_decoder_preserves_sdk_status_and_handles_zero() -> None:
     """New reports replace old, including zero; ordinary DB queries still work."""
     device = device_selector(**args())
     status = device.process_message(frame(bytes.fromhex("05 ca 01 0a 00")))
-    assert status == {WATER: 45.8, ENERGY: 0.01}
+    assert status == {
+        WATER: 45.8,
+        ENERGY: 0.01,
+        "cycle_report_sequence": 1,
+    }
     assert device.attributes[WATER] == pytest.approx(45.8)
     zero = device.process_message(frame(bytes.fromhex("05 00 00 00 00")))
-    assert zero == {WATER: 0, ENERGY: 0}
+    assert zero == {
+        WATER: 0,
+        ENERGY: 0,
+        "cycle_report_sequence": 2,
+    }
     assert device.attributes[ENERGY] == 0
     assert device.build_query()
     assert callable(device.set_attribute)
     assert device.process_message(frame(bytes.fromhex("05 34 12 78 56"))) == {
         WATER: 0x1234 / 10,
         ENERGY: 0x5678 / 1000,
+        "cycle_report_sequence": 3,
     }
 
 
